@@ -1,0 +1,15 @@
+[general]
+name=Drone Tiler
+qgisMinimumVersion=3.0
+description=Slice a GeoTIFF into overlapping frames that mimic a UAV/drone photo survey.
+about=Adds a Processing algorithm that cuts a north-up, 8-bit GeoTIFF into a lawnmower grid of overlapping JPEG frames, imitating the individual photos of a UAV/drone survey. Set the frame footprint in metres and the forward/side overlap; each frame gets a world file (.wld) plus a frames.csv manifest of centres and bounds. Intended for visual mock-ups and demos.
+version=0.1.0
+author=Mohamed Elfadily
+email=mohamedelfadily97@gmail.com
+tracker=https://github.com/fadili97/qgis-drone-tiler/issues
+repository=https://github.com/fadili97/qgis-drone-tiler
+homepage=https://github.com/fadili97/qgis-drone-tiler
+category=Raster
+tags=raster,tiles,drone,uav,split,overlap,processing,orthophoto
+experimental=True
+deprecated=False

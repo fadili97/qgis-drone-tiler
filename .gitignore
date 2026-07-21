@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*.zip
+# sample outputs
+frames.csv
+frame_*.jpg
+frame_*.jpg.aux.xml
+*.wld
