@@ -22,6 +22,10 @@ def main():
     p.add_argument('--fwd', type=float, default=80.0, help='forward overlap %%')
     p.add_argument('--side', type=float, default=70.0, help='side overlap %%')
     p.add_argument('--quality', type=int, default=90, help='JPEG quality')
+    p.add_argument('--out-w', type=int, default=0, help='output width px (0 = native)')
+    p.add_argument('--out-h', type=int, default=0, help='output height px (0 = native)')
+    p.add_argument('--resample', default='cubic',
+                   choices=['cubic', 'lanczos', 'bilinear', 'nearest'])
     p.add_argument('--keep-partial', action='store_true', help='keep partial edge frames')
     p.add_argument('--no-serpentine', action='store_true', help='row-major numbering')
     args = p.parse_args()
@@ -37,6 +41,7 @@ def main():
             fwd_overlap=args.fwd, side_overlap=args.side,
             serpentine=not args.no_serpentine,
             keep_partial=args.keep_partial, quality=args.quality,
+            out_w=args.out_w, out_h=args.out_h, resample=args.resample,
             log=lambda m: print(m), progress=progress,
         )
     except TilerError as e:

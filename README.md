@@ -40,7 +40,17 @@ Processing Toolbox → **Drone Tiler → Simulate drone frames from raster**.
 | Serpentine numbering | Number frames boustrophedon (snake) order | on |
 | Keep partial edge frames | Also write clipped frames at the borders | off |
 | JPEG quality | 1–100 | 90 |
+| Output frame width / height in px | Resample each frame to this size; `0` = native 1:1 crop | 0 |
+| Resampling | cubic / lanczos / bilinear / nearest (only when resizing) | cubic |
 | Output folder | Where frames + manifest are written | — |
+
+### Resizing vs. real resolution
+
+Setting an output size lets frames match a real camera's dimensions — e.g. `5280 × 3956`
+for a DJI Mavic 3E — which also pushes file sizes into the multi-megabyte range typical of
+drone photos. **It adds no real detail:** the ground resolution stays that of the source
+raster, the extra pixels are interpolated. To gain genuine pixels instead, enlarge the
+ground footprint (more metres per frame) and leave the output size at `0`.
 
 Frame pixel size and the step between frames are **derived** from the raster's own resolution
 (GSD) and your overlaps — you don't set them:

@@ -36,8 +36,14 @@ def frame_grid(width, height, frame_w, frame_h, step_x, step_y, serpentine=True)
 
 def tile_raster(src, out_dir, frame_w_m, frame_h_m, fwd_overlap, side_overlap,
                 serpentine=True, keep_partial=False, quality=90,
+                out_w=0, out_h=0, resample='cubic',
                 log=None, progress=None, is_canceled=None):
-    """Slice `src` into overlapping JPEG frames. Returns a summary dict."""
+    """Slice `src` into overlapping JPEG frames. Returns a summary dict.
+
+    out_w/out_h resample each frame to that pixel size (0 = keep native, i.e. a
+    1:1 crop). Upscaling matches real camera dimensions but adds no real detail —
+    the ground resolution stays that of the source raster.
+    """
     log = log or (lambda m: None)
     ds = gdal.Open(src)
     if ds is None:
@@ -66,6 +72,9 @@ def tile_raster(src, out_dir, frame_w_m, frame_h_m, fwd_overlap, side_overlap,
     log('GSD: %.4f x %.4f m/px' % (px, py))
     log('Frame: %d x %d px | step: %d x %d px | grid up to %d frame(s)'
         % (fw, fh, step_x, step_y, total))
+    if out_w and out_h:
+        log('Output resampled to %d x %d px (%s) — no added detail, GSD unchanged'
+            % (out_w, out_h, resample))
 
     os.makedirs(out_dir, exist_ok=True)
     manifest = os.path.join(out_dir, 'frames.csv')
@@ -88,11 +97,18 @@ def tile_raster(src, out_dir, frame_w_m, frame_h_m, fwd_overlap, side_overlap,
 
             written += 1
             name = 'frame_%04d.jpg' % written
+            kw = {}
+            if out_w and out_h:
+                # scale proportionally so partial edge frames are not stretched
+                kw = {'width': max(1, int(round(out_w * xsize / float(fw)))),
+                      'height': max(1, int(round(out_h * ysize / float(fh)))),
+                      'resampleAlg': resample}
             out_ds = gdal.Translate(
                 os.path.join(out_dir, name), ds,
                 srcWin=[xoff, yoff, xsize, ysize],
                 format='JPEG', bandList=band_list,
                 creationOptions=['QUALITY=%d' % quality, 'WORLDFILE=YES'],
+                **kw
             )
             if out_ds is None:
                 raise TilerError('GDAL failed to write %s' % name)
@@ -106,7 +122,7 @@ def tile_raster(src, out_dir, frame_w_m, frame_h_m, fwd_overlap, side_overlap,
                 written, name, ri, ci,
                 '%.3f' % ((min_x + max_x) / 2.0), '%.3f' % ((min_y + max_y) / 2.0),
                 '%.3f' % min_x, '%.3f' % min_y, '%.3f' % max_x, '%.3f' % max_y,
-                xsize, ysize,
+                kw.get('width', xsize), kw.get('height', ysize),
             ])
             if progress and total:
                 progress(int(100 * written / total))

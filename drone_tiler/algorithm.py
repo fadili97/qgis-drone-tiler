@@ -8,6 +8,7 @@ from qgis.core import (
     QgsProcessingParameterRasterLayer,
     QgsProcessingParameterNumber,
     QgsProcessingParameterBoolean,
+    QgsProcessingParameterEnum,
     QgsProcessingParameterFolderDestination,
 )
 
@@ -23,7 +24,12 @@ class DroneTilerAlgorithm(QgsProcessingAlgorithm):
     SERPENTINE = 'SERPENTINE'
     KEEP_PARTIAL = 'KEEP_PARTIAL'
     QUALITY = 'QUALITY'
+    OUT_W = 'OUT_W'
+    OUT_H = 'OUT_H'
+    RESAMPLE = 'RESAMPLE'
     OUTPUT = 'OUTPUT'
+
+    RESAMPLE_METHODS = ['cubic', 'lanczos', 'bilinear', 'nearest']
 
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterRasterLayer(
@@ -47,6 +53,15 @@ class DroneTilerAlgorithm(QgsProcessingAlgorithm):
         self.addParameter(QgsProcessingParameterNumber(
             self.QUALITY, self.tr('JPEG quality'),
             QgsProcessingParameterNumber.Integer, 90, minValue=1, maxValue=100))
+        self.addParameter(QgsProcessingParameterNumber(
+            self.OUT_W, self.tr('Output frame width in px (0 = native crop)'),
+            QgsProcessingParameterNumber.Integer, 0, minValue=0))
+        self.addParameter(QgsProcessingParameterNumber(
+            self.OUT_H, self.tr('Output frame height in px (0 = native crop)'),
+            QgsProcessingParameterNumber.Integer, 0, minValue=0))
+        self.addParameter(QgsProcessingParameterEnum(
+            self.RESAMPLE, self.tr('Resampling (only used when resizing)'),
+            options=self.RESAMPLE_METHODS, defaultValue=0))
         self.addParameter(QgsProcessingParameterFolderDestination(
             self.OUTPUT, self.tr('Output folder')))
 
@@ -66,6 +81,10 @@ class DroneTilerAlgorithm(QgsProcessingAlgorithm):
                 serpentine=self.parameterAsBool(parameters, self.SERPENTINE, context),
                 keep_partial=self.parameterAsBool(parameters, self.KEEP_PARTIAL, context),
                 quality=self.parameterAsInt(parameters, self.QUALITY, context),
+                out_w=self.parameterAsInt(parameters, self.OUT_W, context),
+                out_h=self.parameterAsInt(parameters, self.OUT_H, context),
+                resample=self.RESAMPLE_METHODS[
+                    self.parameterAsEnum(parameters, self.RESAMPLE, context)],
                 log=feedback.pushInfo,
                 progress=feedback.setProgress,
                 is_canceled=feedback.isCanceled,
