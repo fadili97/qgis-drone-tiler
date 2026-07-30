@@ -50,6 +50,16 @@ frame_px   = frame_metres / GSD
 step        = frame_px * (1 - overlap)
 ```
 
+## Run without the QGIS GUI
+
+The tiling logic lives in `drone_tiler/core.py` and has **no QGIS dependency** (GDAL only),
+so it can be driven from the command line with QGIS's bundled Python:
+
+```bat
+"C:\Program Files\QGIS 3.44.11\bin\python-qgis-ltr.bat" scripts\run_tiler.py ^
+    ortho_rgb.tif out_frames --frame-w 800 --frame-h 600 --fwd 75 --side 65 --quality 93
+```
+
 ## Output
 
 - `frame_0001.jpg`, `frame_0002.jpg`, … — the individual frames.
