@@ -70,6 +70,33 @@ so it can be driven from the command line with QGIS's bundled Python:
     ortho_rgb.tif out_frames --frame-w 800 --frame-h 600 --fwd 75 --side 65 --quality 93
 ```
 
+## DJI-style metadata (post-processing)
+
+`scripts/add_metadata.py` turns a folder of frames into something that looks like a real
+DJI download: it geotags each frame, renames it to the DJI convention and writes a `.MRK`
+companion file.
+
+```bat
+"C:\Program Files\QGIS 3.44.11\bin\python-qgis-ltr.bat" scripts\add_metadata.py ^
+    out_frames --source-raster ortho_rgb.tif --speed 15
+```
+
+It reads `frames.csv`, reprojects each frame centre to WGS84 and writes:
+
+- **EXIF** — `Make`/`Model`, focal length, GPS latitude/longitude/altitude, `DateTimeOriginal`.
+- **XMP** — a `drone-dji` block with absolute/relative altitude and gimbal angles. Yaw is
+  derived from the bearing between consecutive frames on the same flight line, so it follows
+  the serpentine.
+- **Filenames** — `DJI_<YYYYMMDDHHMMSS>_<NNNN>_V.JPG`, worldfiles renamed to match.
+- **`<flight>_Timestamp.MRK`** — one RTK-style position record per shot.
+
+Flight altitude is not guessed: it is the altitude at which a Mavic 3E would produce exactly
+this ground footprint, computed from the manifest. `--speed` sets the shot interval from the
+real spacing between frames (otherwise `--interval` seconds is used).
+
+The JPEG pixel data is **not re-encoded** — segments are spliced in, so enriching costs no
+extra quality and takes minutes rather than hours.
+
 ## Output
 
 - `frame_0001.jpg`, `frame_0002.jpg`, … — the individual frames.
