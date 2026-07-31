@@ -11,6 +11,7 @@ import os
 import sys
 import csv
 import math
+import time
 import argparse
 import datetime
 
@@ -23,6 +24,22 @@ from osgeo import gdal, osr  # noqa: E402
 CALIBRATED_FOCAL_PX = 3725.151611
 FOCAL_MM = 12.29
 FOCAL_35 = 24
+
+
+def retry(fn, *a, **kw):
+    """Windows: an antivirus scan or an open QGIS layer can hold a brief lock."""
+    for attempt in range(8):
+        try:
+            return fn(*a, **kw)
+        except OSError:
+            if attempt == 7:
+                raise
+            time.sleep(0.4 * (attempt + 1))
+
+
+def _write(path, data):
+    with open(path, 'wb') as f:
+        f.write(data)
 
 
 def bearing(x1, y1, x2, y2):
@@ -41,6 +58,9 @@ def main():
                    help='ground speed m/s; overrides --interval using real frame spacing')
     p.add_argument('--ground-alt', type=float, default=0.0,
                    help='terrain elevation (m) used for AbsoluteAltitude')
+    p.add_argument('--rel-alt', type=float, default=0.0,
+                   help='force flight altitude (m) instead of deriving it from the '
+                        'frame footprint; the two then no longer agree geometrically')
     p.add_argument('--model', default='M3E')
     p.add_argument('--no-rename', action='store_true')
     args = p.parse_args()
@@ -69,8 +89,13 @@ def main():
     gw = float(rows[0]['max_x']) - float(rows[0]['min_x'])
     gsd = gw / float(rows[0]['width_px'])
     rel_alt = gsd * CALIBRATED_FOCAL_PX
-    abs_alt = args.ground_alt + rel_alt
     print('GSD sortie : %.4f m/px  ->  altitude equivalente M3E : %.1f m' % (gsd, rel_alt))
+    if args.rel_alt > 0:
+        print('Altitude forcee a %.1f m (emprise %.0f m ; la geometrie M3E impliquerait '
+              '%.0f m -> valeurs non concordantes, voulu)'
+              % (args.rel_alt, gw, rel_alt))
+        rel_alt = args.rel_alt
+    abs_alt = args.ground_alt + rel_alt
 
     if args.speed > 0 and len(rows) > 1 and rows[1]['row'] == rows[0]['row']:
         spacing = math.hypot(float(rows[1]['center_x']) - float(rows[0]['center_x']),
@@ -93,6 +118,7 @@ def main():
 
     mrk_lines = []
     out_rows = []
+    locked = []
     n = len(rows)
     for i, r in enumerate(rows):
         src = os.path.join(args.frames_dir, r['filename'])
@@ -121,23 +147,33 @@ def main():
             dst_name = 'DJI_%s_%04d_V.JPG' % (shot.strftime('%Y%m%d%H%M%S'), i + 1)
         dst = os.path.join(args.frames_dir, dst_name)
 
-        with open(dst, 'wb') as f:
-            f.write(data)
-        if dst_name != r['filename']:
-            os.remove(src)
-            old_wld = os.path.splitext(src)[0] + '.wld'
-            if os.path.exists(old_wld):
-                os.replace(old_wld, os.path.splitext(dst)[0] + '.wld')
-            aux = src + '.aux.xml'
-            if os.path.exists(aux):
-                os.remove(aux)
-
+        # the flight record is known whether or not the write succeeds, so fill
+        # it in first — a locked file must not punch a hole in MRK/manifest
         mrk_lines.append(
             '%d\t%.6f\t[%d]\t     0,N\t     0,E\t     0,V\t'
             '%.8f,Lat\t%.8f,Lon\t%.3f,Ellh\t0.000000, 0.000000, 0.000000\t1,Q'
             % (i + 1, args.interval * i, 2374, lat, lon, abs_alt))
 
-        r['filename'] = dst_name
+        written_ok = True
+        try:
+            retry(_write, dst, data)
+        except OSError:
+            # held by another process (an open QGIS layer, antivirus): skip it,
+            # report at the end, let the user re-run for these only
+            locked.append(r['filename'])
+            written_ok = False
+
+        if written_ok:
+            if dst_name != r['filename']:
+                retry(os.remove, src)
+                old_wld = os.path.splitext(src)[0] + '.wld'
+                if os.path.exists(old_wld):
+                    retry(os.replace, old_wld, os.path.splitext(dst)[0] + '.wld')
+                aux = src + '.aux.xml'
+                if os.path.exists(aux):
+                    retry(os.remove, aux)
+            r['filename'] = dst_name
+
         r['lat'] = '%.9f' % lat
         r['lon'] = '%.9f' % lon
         r['rel_alt'] = '%.3f' % rel_alt
@@ -159,7 +195,15 @@ def main():
         w.writeheader()
         w.writerows(out_rows)
 
-    print('\nOK — %d frames enrichies | MRK: %s' % (len(out_rows), os.path.basename(mrk)))
+    print('\nOK — %d/%d frames enrichies | MRK: %s'
+          % (len(out_rows) - len(locked), len(out_rows), os.path.basename(mrk)))
+    if locked:
+        print('VERROUILLEES (non reecrites), fermer QGIS et relancer : %d' % len(locked))
+        for name in locked[:10]:
+            print('   %s' % name)
+        if len(locked) > 10:
+            print('   ... et %d autres' % (len(locked) - 10))
+        return 2
     return 0
 
 
