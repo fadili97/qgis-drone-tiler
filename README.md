@@ -106,6 +106,24 @@ Measured on a Tanwakka test area (88 frames), against a 76-photo nadir reference
 | **tone-matched** | **136.1** | **23.6** | **28.0%** |
 | drone reference | 136.7 | 23.8 | 27.4% |
 
+### Correcting the ortho instead of the frames
+
+`scripts/tone_ortho.py` applies the same tonal correction to a whole orthomosaic and writes a
+corrected RGB GeoTIFF, so the source itself carries the drone look:
+
+```bat
+"C:\Program Files\QGIS 3.44.11\bin\python-qgis-ltr.bat" scripts\tone_ortho.py ^
+    ortho.tif ortho_drone.tif --tone-ref "path\to\DJI_photos" --frame-w 800 --frame-h 600
+```
+
+It processes block by block, so a multi-gigabyte ortho is handled without loading it in memory,
+and it reports how much the correction clips.
+
+**Vignetting and jitter are deliberately not applied here** — they are per-photo effects, and
+baking them into an ortho would stamp a dark blob in the middle of the map. Add them at tiling
+time with `--vignette` / `--jitter`. The contrast gain is still calibrated at frame scale
+(`--frame-w/-h`), so frames cut from the corrected ortho land on the drone target.
+
 ## DJI-style metadata (post-processing)
 
 `scripts/add_metadata.py` turns a folder of frames into something that looks like a real

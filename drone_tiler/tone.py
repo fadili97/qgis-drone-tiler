@@ -58,8 +58,12 @@ def _gimbal_pitch(path):
 def measure_reference(folder, max_photos=25, nadir_below=-80.0):
     """Tonal profile of real drone photos. Oblique shots are skipped: they
     contain sky and horizon and are not comparable with a nadir crop."""
-    files = sorted(glob.glob(os.path.join(folder, '*.JPG')) +
-                   glob.glob(os.path.join(folder, '*.jpg')))
+    # dedup: on a case-insensitive filesystem *.JPG and *.jpg return the same files
+    seen = {}
+    for pat in ('*.JPG', '*.jpg'):
+        for f in glob.glob(os.path.join(folder, pat)):
+            seen[os.path.normcase(os.path.abspath(f))] = f
+    files = sorted(seen.values())
     nadir = [f for f in files if (_gimbal_pitch(f) or 0.0) < nadir_below]
     pool = nadir or files
     sel = pool[::max(1, len(pool) // max_photos)][:max_photos]
