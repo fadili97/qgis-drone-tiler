@@ -34,9 +34,38 @@ def frame_grid(width, height, frame_w, frame_h, step_x, step_y, serpentine=True)
     return frames
 
 
+def _write_matched(dst_path, ds, src_win, band_list, resize_kw, quality,
+                   matcher, index):
+    """Crop through MEM, apply the tone match, then encode. Only used when
+    matching is on, so the plain path keeps working without numpy."""
+    import numpy as np
+
+    mem = gdal.Translate('', ds, format='MEM', srcWin=src_win,
+                         bandList=band_list, **resize_kw)
+    if mem is None:
+        return None
+    arr = np.stack([mem.GetRasterBand(i + 1).ReadAsArray()
+                    for i in range(mem.RasterCount)]).astype(np.float32)
+    if arr.shape[0] == 1:                      # greyscale source
+        arr = np.repeat(arr, 3, axis=0)
+    arr = matcher.apply(arr, index)
+
+    h, w = arr.shape[1], arr.shape[2]
+    out = gdal.GetDriverByName('MEM').Create('', w, h, 3, gdal.GDT_Byte)
+    for c in range(3):
+        out.GetRasterBand(c + 1).WriteArray(arr[c].astype('uint8'))
+    out.SetGeoTransform(mem.GetGeoTransform())
+    out.SetProjection(mem.GetProjection())
+    mem = None
+    res = gdal.GetDriverByName('JPEG').CreateCopy(
+        dst_path, out, options=['QUALITY=%d' % quality, 'WORLDFILE=YES'])
+    out = None
+    return res
+
+
 def tile_raster(src, out_dir, frame_w_m, frame_h_m, fwd_overlap, side_overlap,
                 serpentine=True, keep_partial=False, quality=90,
-                out_w=0, out_h=0, resample='cubic',
+                out_w=0, out_h=0, resample='cubic', matcher=None,
                 log=None, progress=None, is_canceled=None):
     """Slice `src` into overlapping JPEG frames. Returns a summary dict.
 
@@ -103,13 +132,18 @@ def tile_raster(src, out_dir, frame_w_m, frame_h_m, fwd_overlap, side_overlap,
                 kw = {'width': max(1, int(round(out_w * xsize / float(fw)))),
                       'height': max(1, int(round(out_h * ysize / float(fh)))),
                       'resampleAlg': resample}
-            out_ds = gdal.Translate(
-                os.path.join(out_dir, name), ds,
-                srcWin=[xoff, yoff, xsize, ysize],
-                format='JPEG', bandList=band_list,
-                creationOptions=['QUALITY=%d' % quality, 'WORLDFILE=YES'],
-                **kw
-            )
+            dst_path = os.path.join(out_dir, name)
+            if matcher is None:
+                out_ds = gdal.Translate(
+                    dst_path, ds,
+                    srcWin=[xoff, yoff, xsize, ysize],
+                    format='JPEG', bandList=band_list,
+                    creationOptions=['QUALITY=%d' % quality, 'WORLDFILE=YES'],
+                    **kw
+                )
+            else:
+                out_ds = _write_matched(dst_path, ds, [xoff, yoff, xsize, ysize],
+                                        band_list, kw, quality, matcher, written)
             if out_ds is None:
                 raise TilerError('GDAL failed to write %s' % name)
             out_ds = None

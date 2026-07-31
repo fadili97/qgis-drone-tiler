@@ -70,6 +70,42 @@ so it can be driven from the command line with QGIS's bundled Python:
     ortho_rgb.tif out_frames --frame-w 800 --frame-h 600 --fwd 75 --side 65 --quality 93
 ```
 
+## Matching the look of real drone photos
+
+An orthomosaic is atmospherically normalised and blended: it is flat, often too bright and
+over-saturated, and it carries no lens signature. `--tone-ref` points at a folder of real
+drone photos and reshapes every frame to match them.
+
+```bat
+"C:\Program Files\QGIS 3.44.11\bin\python-qgis-ltr.bat" scripts\run_tiler.py ^
+    ortho_rgb.tif out_frames --frame-w 800 --frame-h 600 --fwd 85 --side 80 ^
+    --tone-ref "path\to\DJI_photos" --vignette 0.5 --jitter 0.045
+```
+
+What it does, and why each part is the way it is:
+
+- **Luminance is stretched on its own**, preserving the R:G:B ratios. Stretching each channel
+  independently wrecks the hues — haze compresses blue far more than red, so independent gains
+  produce a magenta cast.
+- **Source statistics are measured on frame-sized windows**, not on the whole ortho. Contrast
+  is scale-dependent: a whole-ortho standard deviation mixes in variation between distant
+  areas no single frame ever sees, and under-estimates the gain a frame needs by ~2×.
+- **Only nadir reference photos are used** (gimbal pitch < -80°). Oblique shots contain sky and
+  horizon and are not comparable with a nadir crop.
+- **Vignetting** (`--vignette`) follows the measured M3E profile: flat across the frame, then a
+  fast drop confined to the extreme corners (~50% at the corner).
+- **Exposure jitter** (`--jitter`) reproduces the frame-to-frame exposure spread of a real
+  flight. A global transform is used rather than per-frame normalisation, so natural
+  brightness variation between areas survives.
+
+Measured on a Tanwakka test area (88 frames), against a 76-photo nadir reference:
+
+| | luminance | contrast (σ) | saturation |
+|---|---|---|---|
+| raw ortho frames | 153.6 | 8.7 | 35.6% |
+| **tone-matched** | **136.1** | **23.6** | **28.0%** |
+| drone reference | 136.7 | 23.8 | 27.4% |
+
 ## DJI-style metadata (post-processing)
 
 `scripts/add_metadata.py` turns a folder of frames into something that looks like a real
